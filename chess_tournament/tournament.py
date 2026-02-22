@@ -11,7 +11,7 @@ def instantiate_participant(desc):
 def destroy_instance(inst):
     raise NotImplementedError("Provide destroy_instance()")
 
-def run_swiss_tournament(
+def swiss_tournament(
     participant_descs: List[Dict[str,Any]],
     instantiate_fn,
     destroy_fn,
