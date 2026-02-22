@@ -4,12 +4,103 @@ from typing import List, Dict, Any
 from .game import Game
 from .players import EnginePlayer
 import gc
+import importlib.util
+import traceback
+from pathlib import Path
+import sys
 
-def instantiate_participant(desc):
-    raise NotImplementedError("Provide instantiate_participant()")
+def instantiate_participant(desc: Dict[str, Any]):
+    """
+    desc is a lightweight descriptor:
+      - student: {"type":"student","id": "...", "name": "...", "repo_path": "/content/student_submissions/12345"}
+      - baseline: {"type":"baseline","id":"baseline-key","name":"Name","factory": callable}
+    Returns a Player instance or raises an Exception with diagnostics.
+    """
+    if desc.get("type") == "baseline":
+        # baseline: call the factory (should return a Player instance)
+        factory = desc.get("factory")
+        if not callable(factory):
+            raise RuntimeError(f"Baseline descriptor {desc.get('id')} missing callable factory")
+        return factory()
+
+    if desc.get("type") == "student":
+        repo_path = Path(desc.get("repo_path", ""))
+        player_py = repo_path / "player.py"
+        if not player_py.exists():
+            raise FileNotFoundError(f"player.py not found for student {desc.get('id')} at {player_py}")
+
+        # import under a unique name so multiple students can be loaded in same process sequentially
+        module_name = f"student_player_{desc.get('id')}_{int(time.time()*1000)}"
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, str(player_py))
+            if spec is None or spec.loader is None:
+                raise ImportError("could not create spec/loader")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        except Exception as e:
+            tb = traceback.format_exc()
+            raise ImportError(f"Failed to import {player_py} for {desc.get('id')}: {e}\n{tb}")
+
+        # look for TransformerPlayer
+        cls = getattr(mod, "TransformerPlayer", None)
+        if cls is None:
+            raise AttributeError(f"TransformerPlayer class not found in {player_py} for {desc.get('id')}")
+
+        # try common ctor patterns
+        try:
+            try:
+                inst = cls(desc.get("name"))
+            except TypeError:
+                inst = cls()
+        except Exception as e:
+            tb = traceback.format_exc()
+            raise RuntimeError(f"Failed to instantiate TransformerPlayer for {desc.get('id')}: {e}\n{tb}")
+
+        return inst
+
+    raise ValueError(f"Unknown descriptor type: {desc!r}")
+
 
 def destroy_instance(inst):
-    raise NotImplementedError("Provide destroy_instance()")
+    """
+    Try to release memory used by a Player instance:
+    - delete common large attributes (model, tokenizer, pipe)
+    - del the object, run GC
+    - if torch is available and cuda used, call empty_cache()
+    """
+    try:
+        # try to delete attributes typically used by model wrappers
+        for attr in ("model", "tokenizer", "pipe", "llm", "tokenizer_"):
+            try:
+                if hasattr(inst, attr):
+                    try:
+                        delattr(inst, attr)
+                    except Exception:
+                        try:
+                            delattr(inst, attr)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # final cleanup
+    try:
+        del inst
+    except Exception:
+        pass
+
+    gc.collect()
+
+    # try to clear torch GPU memory if available
+    try:
+        import torch
+        if torch and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        # not critical — just best-effort
+        pass
 
 def round_robin_tournament(
     players: List,
