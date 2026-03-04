@@ -36,7 +36,7 @@ def _validate_local(dir_name: str) -> dict:
             return res
 
         # load module under unique name
-        module_name = f"student_player_{os.path.basename(student_dir)}_{int(time.time()*1000)}"
+        module_name = f"student_player_{os.path.basename(dir_name)}_{int(time.time()*1000)}"
         spec = importlib.util.spec_from_file_location(module_name, player_path)
         if spec is None or spec.loader is None:
             res["error_message"] = "cannot_create_spec"
@@ -158,9 +158,9 @@ def validate(repo: str) -> dict:
         res = _validate_local(cloned_path)
         if res['import_ok'] and res['class_found'] and res['instance_ok'] and res['valid_move_format']:
             res['approved'] = True
-            print("✓ Validation passed!")
+            print("✅ Player approved!")
         else:
-            print(f"✗ Validation failed: {res['error_message']}")
+            print(f"❌ Player rejected: {res['error_message']}")
         
         return res
     
