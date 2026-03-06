@@ -1,17 +1,139 @@
-def validate_submission(submission):
-    # Implement validation logic for the chess tournament submission here
-    # Example checks might include:
-    # 1. Ensure the submission format is correct
-    # 2. Check for any disallowed moves or invalid formats
-    # 3. Validate that the player IDs are recognized
-    # This is a placeholder for your actual validation code
-    valid = True  # Replace this with actual validation logic
-    return valid
+"""
+Student submission validation using validate_player from chess_exam.
+"""
 
-# Example usage:
-if __name__ == '__main__':
-    submission_data = {}  # Replace with actual submission data
-    if validate_submission(submission_data):
-        print('Submission is valid')
-    else:
-        print('Submission is invalid')
+import subprocess
+from pathlib import Path
+from typing import Optional
+import pandas as pd
+import logging
+
+from ..validate import validate_player
+
+
+class SubmissionValidator:
+    """
+    Validates student submissions using the validate_player function.
+    
+    Handles cloning, validation, and filtering of approved submissions.
+    """
+    
+    def __init__(self, config, logger: logging.Logger):
+        """
+        Args:
+            config: ChampionshipConfig instance
+            logger: Logger instance
+        """
+        self.config = config
+        self.logger = logger
+    
+    def process_submissions(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Validate submissions from Google Forms or similar.
+        
+        Args:
+            df: DataFrame with columns: student_number, repo_url, etc.
+                Must have at least 'student_number' and 'repo_url' columns.
+        
+        Returns:
+            DataFrame with columns:
+                - student_number
+                - repo_url
+                - repo_path (local path after cloning)
+                - approved (bool)
+                - error_msg (if validation failed)
+                - import_ok, class_found, instance_ok, valid_move_format (validation details)
+        """
+        results = []
+        
+        for idx, row in df.iterrows():
+            student_num = str(row.get("student_number", "")).strip()
+            repo_url = str(row.get("repo_url", "")).strip()
+            
+            if not repo_url or not student_num:
+                self.logger.warning(f"Skipping row {idx}: missing student_number or repo_url")
+                continue
+            
+            self.logger.info(f"Validating {student_num}: {repo_url}")
+            
+            try:
+                # Use validate_player from chess_exam
+                validation_result = validate_player(repo_url)
+                approved = validation_result.get("approved", False)
+                
+                if approved:
+                    self.logger.info(f"✅ {student_num} APPROVED")
+                    # Clone repo for tournament use
+                    dest_path = self.config.submission_dir / student_num
+                    if not dest_path.exists():
+                        self._clone_repo(repo_url, dest_path)
+                else:
+                    self.logger.warning(f"❌ {student_num} REJECTED: {validation_result.get('error_message')}")
+                    dest_path = ""
+                
+                results.append({
+                    "student_number": student_num,
+                    "repo_url": repo_url,
+                    "repo_path": str(dest_path),
+                    "approved": approved,
+                    "error_msg": validation_result.get("error_message", ""),
+                    "import_ok": validation_result.get("import_ok", False),
+                    "class_found": validation_result.get("class_found", False),
+                    "instance_ok": validation_result.get("instance_ok", False),
+                    "valid_move_format": validation_result.get("valid_move_format", False),
+                    "duration": validation_result.get("duration", None),
+                })
+            
+            except Exception as e:
+                self.logger.error(f"Validation exception for {student_num}: {e}")
+                results.append({
+                    "student_number": student_num,
+                    "repo_url": repo_url,
+                    "repo_path": "",
+                    "approved": False,
+                    "error_msg": str(e),
+                    "import_ok": False,
+                    "class_found": False,
+                    "instance_ok": False,
+                    "valid_move_format": False,
+                    "duration": None,
+                })
+        
+        result_df = pd.DataFrame(results)
+        result_df.to_csv(self.config.validation_results_csv, index=False)
+        
+        approved_count = result_df["approved"].sum()
+        self.logger.info(f"\nValidation complete: {len(result_df)} submissions, {approved_count} approved")
+        
+        return result_df
+    
+    def _clone_repo(self, repo_url: str, dest_dir: Path) -> bool:
+        """
+        Clone a repository.
+        
+        Args:
+            repo_url: Git repository URL
+            dest_dir: Destination directory
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            result = subprocess.run(
+                ["git", "clone", repo_url, str(dest_dir)],
+                capture_output=True,
+                text=True,
+                timeout=self.config.max_clone_timeout
+            )
+            if result.returncode == 0:
+                self.logger.info(f"✅ Cloned: {repo_url}")
+                return True
+            else:
+                self.logger.error(f"❌ Clone failed: {result.stderr.strip()}")
+                return False
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"❌ Clone timeout: {repo_url}")
+            return False
+        except Exception as e:
+            self.logger.error(f"❌ Error cloning {repo_url}: {e}")
+            return False
