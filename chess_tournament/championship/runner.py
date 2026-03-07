@@ -144,14 +144,18 @@ class TournamentRunner:
                 
                 # Convert results to standard format
                 for rank, name in enumerate(result["leaderboard"], start=1):
-                    # Find participant ID
-                    part_id = next((p["id"] for p in group_participants if p["name"] == name), name)
+                    # Find participant descriptor to get repo_path
+                    part_desc = next((p for p in group_participants if p["name"] == name), None)
+                    part_id = part_desc["id"] if part_desc else name
+                    repo_path = part_desc.get("repo_path", "") if part_desc else ""
                     
                     all_results.append({
                         "group_id": group_id,
                         "rank": rank,
                         "participant_id": part_id,
                         "participant_name": name,
+                        "repo_path": repo_path,
+                        "baseline_key": part_desc.get("baseline_key", "") if part_desc else "",
                         "points": result["scores"][name],
                         "fallbacks": result["fallbacks"][name],
                         "buchholz": result.get("buchholz", {}).get(name, 0.0),
@@ -183,10 +187,10 @@ class TournamentRunner:
         
         for _, row in sorted_results.iterrows():
             advancing.append({
-                "type": "student",
+                "type": "student" if row.get("participant_id", "").startswith("Student") else "baseline",
                 "id": row.get("participant_id", row["participant_name"]),
                 "name": row["participant_name"],
-                "repo_path": row.get("repo_path", ""),
+                "repo_path": str(row.get("repo_path", "")),  # Convert to string
                 "baseline_key": row.get("baseline_key", "")
             })
         
