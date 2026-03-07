@@ -9,15 +9,8 @@ import pandas as pd
 from pathlib import Path
 import logging
 
-# Import validate_player from chess_exam root
-try:
-    from validate import validate_player
-except ImportError:
-    # Fallback: add chess_exam to path
-    chess_exam_path = Path(__file__).parent.parent.parent
-    if str(chess_exam_path) not in sys.path:
-        sys.path.insert(0, str(chess_exam_path))
-    from validate import validate_player
+# Import validate_player from chess_tournament.validate
+from chess_tournament.validate import validate_player
 
 
 class SubmissionValidator:
@@ -70,7 +63,7 @@ class SubmissionValidator:
                     original_cwd = os.getcwd()
                     os.chdir(temp_dir)
                     
-                    # Use validate_player from chess_exam
+                    # Use validate_player from chess_tournament.validate
                     validation_result = validate_player(repo_url)
                     approved = validation_result.get("approved", False)
                     
