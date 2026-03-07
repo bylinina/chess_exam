@@ -131,7 +131,7 @@ class TournamentRunner:
             self.logger.info(f"\n{stage_name} GROUP {group_id}: {len(group_participants)} players, {n_rounds} rounds")
             
             try:
-                # Run swiss tournament for this group
+                # Run swiss tournament for this group (suppress_leaderboard=True)
                 result = swiss_tournament(
                     participant_descs=group_participants,
                     instantiate_fn=instantiate_participant,
@@ -139,10 +139,11 @@ class TournamentRunner:
                     n_rounds=n_rounds,
                     games_per_pairing=games_per_pairing,
                     max_half_moves=max_half_moves,
-                    engine_break=engine_break
+                    engine_break=engine_break,
+                    suppress_leaderboard=True
                 )
                 
-                # Print leaderboard for this group (suppress it in swiss_tournament)
+                # Print leaderboard for this group (AFTER all matches complete)
                 self.logger.info("\n🏆 GROUP LEADERBOARD 🏆")
                 for rank, name in enumerate(result["leaderboard"], start=1):
                     points = result["scores"][name]
@@ -186,39 +187,67 @@ class TournamentRunner:
     
     def get_advancing(self, results_df: pd.DataFrame, top_k: int) -> List[Dict[str, Any]]:
         """
-        Get top_k players by points from results.
+        Get top_k players per group from results.
         
         Args:
             results_df: Results DataFrame from run_swiss_stage
-            top_k: Number of top players to return
+            top_k: Number of top players PER GROUP to return
         
         Returns:
             List of participant descriptors for advancing players
         """
-        sorted_results = results_df.nlargest(top_k, "points")
         advancing = []
         
-        for _, row in sorted_results.iterrows():
-            participant_id = row.get("participant_id", row["participant_name"])
-            participant_name = row["participant_name"]
-            baseline_key = str(row.get("baseline_key", "")).strip()
-            repo_path = str(row.get("repo_path", "")).strip()
-            
-            # Determine type: baselines have participant_id starting with "baseline-"
-            is_baseline = str(participant_id).startswith("baseline-")
-            
-            desc = {
-                "type": "baseline" if is_baseline else "student",
-                "id": participant_id,
-                "name": participant_name,
-                "repo_path": repo_path if repo_path else "",
-                "baseline_key": baseline_key if baseline_key else ""
-            }
-            
-            # Re-inject factory for baselines
-            if is_baseline and baseline_key in self.baseline_factories:
-                desc["factory"] = self.baseline_factories[baseline_key]["factory"]
-            
-            advancing.append(desc)
+        # Get top_k from each group
+        if "group_id" in results_df.columns:
+            for group_id in sorted(results_df["group_id"].unique()):
+                group_results = results_df[results_df["group_id"] == group_id]
+                sorted_results = group_results.nlargest(top_k, "points")
+                
+                for _, row in sorted_results.iterrows():
+                    participant_id = row.get("participant_id", row["participant_name"])
+                    participant_name = row["participant_name"]
+                    baseline_key = str(row.get("baseline_key", "")).strip()
+                    repo_path = str(row.get("repo_path", "")).strip()
+                    
+                    # Determine type: baselines have participant_id starting with "baseline-"
+                    is_baseline = str(participant_id).startswith("baseline-")
+                    
+                    desc = {
+                        "type": "baseline" if is_baseline else "student",
+                        "id": participant_id,
+                        "name": participant_name,
+                        "repo_path": repo_path if repo_path else "",
+                        "baseline_key": baseline_key if baseline_key else ""
+                    }
+                    
+                    # Re-inject factory for baselines
+                    if is_baseline and baseline_key in self.baseline_factories:
+                        desc["factory"] = self.baseline_factories[baseline_key]["factory"]
+                    
+                    advancing.append(desc)
+        else:
+            # Fallback: if no group_id, just get top_k globally
+            sorted_results = results_df.nlargest(top_k, "points")
+            for _, row in sorted_results.iterrows():
+                participant_id = row.get("participant_id", row["participant_name"])
+                participant_name = row["participant_name"]
+                baseline_key = str(row.get("baseline_key", "")).strip()
+                repo_path = str(row.get("repo_path", "")).strip()
+                
+                is_baseline = str(participant_id).startswith("baseline-")
+                
+                desc = {
+                    "type": "baseline" if is_baseline else "student",
+                    "id": participant_id,
+                    "name": participant_name,
+                    "repo_path": repo_path if repo_path else "",
+                    "baseline_key": baseline_key if baseline_key else ""
+                }
+                
+                if is_baseline and baseline_key in self.baseline_factories:
+                    desc["factory"] = self.baseline_factories[baseline_key]["factory"]
+                
+                advancing.append(desc)
         
         return advancing
