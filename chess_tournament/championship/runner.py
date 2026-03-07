@@ -143,7 +143,7 @@ class TournamentRunner:
                     suppress_leaderboard=True
                 )
                 
-                # Print leaderboard for this group (AFTER all matches complete)
+                # Print leaderboard for this group (AFTER all matches in group complete)
                 self.logger.info("\n🏆 GROUP LEADERBOARD 🏆")
                 for rank, name in enumerate(result["leaderboard"], start=1):
                     points = result["scores"][name]
