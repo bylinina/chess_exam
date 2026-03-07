@@ -192,14 +192,14 @@ class ChessChampionship:
                 "repo_path": row["repo_path"]
             })
         
-        # Add baseline players
+        # Add baseline players - IMPORTANT: include the factory!
         for baseline_key, info in self.baseline_factories.items():
             participants.append({
                 "type": "baseline",
                 "id": f"baseline-{baseline_key}",
                 "name": info["name"],
                 "baseline_key": baseline_key,
-                "factory": info["factory"]
+                "factory": info["factory"]  # <-- THIS IS THE FIX!
             })
         
         return participants
