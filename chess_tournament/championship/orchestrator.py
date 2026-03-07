@@ -50,7 +50,8 @@ class ChessChampionship:
             semifinals_rounds: int = 3,
             semifinals_top_k: int = 2,
             finals_games_per_pair: int = 2,
-            max_half_moves: int = 200) -> Dict[str, Any]:
+            max_half_moves: int = 200,
+            skip_validation: bool = False) -> Dict[str, Any]:
         """
         Run complete championship: Qualifiers → Semifinals → Finals
         
@@ -58,6 +59,10 @@ class ChessChampionship:
             submissions_df: DataFrame from Google Forms with columns:
                           - student_number (required)
                           - repo_url (required)
+                          OR if skip_validation=True, must have:
+                          - student_number
+                          - repo_path
+                          - approved (bool)
             qualifiers_group_size: Players per group in qualifiers
             qualifiers_rounds: Number of Swiss rounds in qualifiers
             qualifiers_top_k: Top K per group advancing from qualifiers
@@ -66,6 +71,7 @@ class ChessChampionship:
             semifinals_top_k: Top K per group advancing to finals
             finals_games_per_pair: Games per pair in finals
             max_half_moves: Maximum half-moves per game
+            skip_validation: If True, skip validation (use pre-validated df)
         
         Returns:
             Dict with keys:
@@ -79,13 +85,17 @@ class ChessChampionship:
         self.logger.info("╔════════════════════════════════════════╗")
         self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK          ║")
         self.logger.info("║   Qualifiers → Semifinals → Finals      ║")
-        self.logger.info("╚════════════════════════════════════════╝\n")
-        self.logger.info(f"Work directory: {self.config.work_dir}\n")
+        self.logger.info("╚════════════════════════════════════════╝")
+        self.logger.info(f"Work directory: {self.config.work_dir}")
         
-        # [1] Validate submissions
-        self.logger.info("[1/6] VALIDATING SUBMISSIONS")
-        validator = SubmissionValidator(self.config, self.logger)
-        validation_df = validator.process_submissions(submissions_df)
+        # [1] Validate submissions (or skip if already done)
+        if skip_validation:
+            self.logger.info("\n[1/6] SKIPPING VALIDATION (pre-validated)")
+            validation_df = submissions_df
+        else:
+            self.logger.info("\n[1/6] VALIDATING SUBMISSIONS")
+            validator = SubmissionValidator(self.config, self.logger)
+            validation_df = validator.process_submissions(submissions_df)
         
         # [2] Build participants list
         self.logger.info("\n[2/6] BUILDING PARTICIPANTS")
@@ -152,14 +162,9 @@ class ChessChampionship:
         LeaderboardGenerator.write_markdown(final_results, self.config.final_leaderboard_md)
         final_results.to_csv(self.config.final_leaderboard_csv, index=False)
         
-        self.logger.info(f"\n✅ CHAMPIONSHIP COMPLETE!\n")
+        self.logger.info(f"\n✅ CHAMPIONSHIP COMPLETE!")
         self.logger.info(f"Leaderboard (Markdown): {self.config.final_leaderboard_md}")
         self.logger.info(f"Leaderboard (CSV): {self.config.final_leaderboard_csv}")
-        self.logger.info(f"\n{'='*80}")
-        self.logger.info("FINAL LEADERBOARD".center(80))
-        self.logger.info(f"{'='*80}\n")
-        self.logger.info(final_results.to_string(index=False))
-        self.logger.info(f"\n{'='*80}\n")
         
         return {
             "leaderboard": final_results,
