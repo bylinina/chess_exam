@@ -144,10 +144,11 @@ class TournamentRunner:
                 
                 # Convert results to standard format
                 for rank, name in enumerate(result["leaderboard"], start=1):
-                    # Find participant descriptor to get repo_path
+                    # Find participant descriptor to get repo_path and baseline_key
                     part_desc = next((p for p in group_participants if p["name"] == name), None)
                     part_id = part_desc["id"] if part_desc else name
                     repo_path = part_desc.get("repo_path", "") if part_desc else ""
+                    baseline_key = part_desc.get("baseline_key", "") if part_desc else ""
                     
                     all_results.append({
                         "group_id": group_id,
@@ -155,7 +156,7 @@ class TournamentRunner:
                         "participant_id": part_id,
                         "participant_name": name,
                         "repo_path": repo_path,
-                        "baseline_key": part_desc.get("baseline_key", "") if part_desc else "",
+                        "baseline_key": baseline_key,
                         "points": result["scores"][name],
                         "fallbacks": result["fallbacks"][name],
                         "buchholz": result.get("buchholz", {}).get(name, 0.0),
@@ -186,12 +187,24 @@ class TournamentRunner:
         advancing = []
         
         for _, row in sorted_results.iterrows():
-            advancing.append({
-                "type": "student" if row.get("participant_id", "").startswith("Student") else "baseline",
-                "id": row.get("participant_id", row["participant_name"]),
+            participant_id = row.get("participant_id", row["participant_name"])
+            baseline_key = row.get("baseline_key", "")
+            
+            # Determine type: if baseline_key exists and is not empty, it's a baseline
+            is_baseline = baseline_key != "" and baseline_key is not None and str(baseline_key).strip() != ""
+            
+            desc = {
+                "type": "baseline" if is_baseline else "student",
+                "id": participant_id,
                 "name": row["participant_name"],
-                "repo_path": str(row.get("repo_path", "")),  # Convert to string
-                "baseline_key": row.get("baseline_key", "")
-            })
+                "repo_path": str(row.get("repo_path", "")),
+                "baseline_key": baseline_key
+            }
+            
+            # Re-inject factory for baselines
+            if is_baseline and baseline_key in self.baseline_factories:
+                desc["factory"] = self.baseline_factories[baseline_key]["factory"]
+            
+            advancing.append(desc)
         
         return advancing
