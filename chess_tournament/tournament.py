@@ -9,6 +9,8 @@ import traceback
 from pathlib import Path
 import sys
 
+import os
+
 def instantiate_participant(desc: Dict[str, Any]):
     """
     desc is a lightweight descriptor:
@@ -29,37 +31,47 @@ def instantiate_participant(desc: Dict[str, Any]):
         if not player_py.exists():
             raise FileNotFoundError(f"player.py not found for student {desc.get('id')} at {player_py}")
 
-        # import under a unique name so multiple students can be loaded in same process sequentially
-        module_name = f"student_player_{desc.get('id')}_{int(time.time()*1000)}"
+        # Save current working directory
+        original_cwd = os.getcwd()
+        
         try:
-            spec = importlib.util.spec_from_file_location(module_name, str(player_py))
-            if spec is None or spec.loader is None:
-                raise ImportError("could not create spec/loader")
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-        except Exception as e:
-            tb = traceback.format_exc()
-            raise ImportError(f"Failed to import {player_py} for {desc.get('id')}: {e}\n{tb}")
-
-        # look for TransformerPlayer
-        cls = getattr(mod, "TransformerPlayer", None)
-        if cls is None:
-            raise AttributeError(f"TransformerPlayer class not found in {player_py} for {desc.get('id')}")
-
-        # try common ctor patterns
-        try:
+            # Change to student's repo directory (so relative paths work)
+            os.chdir(repo_path)
+            
+            # import under a unique name so multiple students can be loaded in same process sequentially
+            module_name = f"student_player_{desc.get('id')}_{int(time.time()*1000)}"
             try:
-                inst = cls(desc.get("name"))
-            except TypeError:
-                inst = cls()
-        except Exception as e:
-            tb = traceback.format_exc()
-            raise RuntimeError(f"Failed to instantiate TransformerPlayer for {desc.get('id')}: {e}\n{tb}")
+                spec = importlib.util.spec_from_file_location(module_name, str(player_py))
+                if spec is None or spec.loader is None:
+                    raise ImportError("could not create spec/loader")
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+            except Exception as e:
+                tb = traceback.format_exc()
+                raise ImportError(f"Failed to import {player_py} for {desc.get('id')}: {e}\n{tb}")
 
-        return inst
+            # look for TransformerPlayer
+            cls = getattr(mod, "TransformerPlayer", None)
+            if cls is None:
+                raise AttributeError(f"TransformerPlayer class not found in {player_py} for {desc.get('id')}")
+
+            # try common ctor patterns
+            try:
+                try:
+                    inst = cls(desc.get("name"))
+                except TypeError:
+                    inst = cls()
+            except Exception as e:
+                tb = traceback.format_exc()
+                raise RuntimeError(f"Failed to instantiate TransformerPlayer for {desc.get('id')}: {e}\n{tb}")
+
+            return inst
+        
+        finally:
+            # Always restore original working directory
+            os.chdir(original_cwd)
 
     raise ValueError(f"Unknown descriptor type: {desc!r}")
-
 
 def destroy_instance(inst):
     """
