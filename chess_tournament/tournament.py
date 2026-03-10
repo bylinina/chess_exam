@@ -306,10 +306,15 @@ def swiss_tournament(
                     destroy_fn(p1)
                     destroy_fn(p2)
 
-                scores[p1_name] += match_scores[p1_name]
-                scores[p2_name] += match_scores[p2_name]
-                fallbacks[p1_name] += match_fallbacks[p1_name]
-                fallbacks[p2_name] += match_fallbacks[p2_name]
+                # FIX: Use actual player names from match_scores dict
+                for player_name, score in match_scores.items():
+                    scores[player_name] += score
+                    fallbacks[player_name] += match_fallbacks[player_name]
+                
+                #scores[p1_name] += match_scores[p1_name]
+                #scores[p2_name] += match_scores[p2_name]
+                #fallbacks[p1_name] += match_fallbacks[p1_name]
+                #fallbacks[p2_name] += match_fallbacks[p2_name]
 
                 print(f"{result}")
 
