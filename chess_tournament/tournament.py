@@ -297,6 +297,11 @@ def swiss_tournament(
 
                 p1 = instantiate_fn(desc1)
                 p2 = instantiate_fn(desc2)
+                
+                # FIX: Set player names to match tournament participant names
+                # so match_scores dict keys align with participant tracking
+                p1.name = p1_name
+                p2.name = p2_name
 
                 try:
                     game = Game(p1, p2, max_half_moves=max_half_moves)
@@ -306,16 +311,12 @@ def swiss_tournament(
                     destroy_fn(p1)
                     destroy_fn(p2)
 
-                # FIX: Use actual player names from match_scores dict
-                for player_name, score in match_scores.items():
-                    scores[player_name] += score
-                    fallbacks[player_name] += match_fallbacks[player_name]
+                # Now match_scores keys ARE the participant names
+                scores[p1_name] += match_scores[p1_name]
+                scores[p2_name] += match_scores[p2_name]
+                fallbacks[p1_name] += match_fallbacks[p1_name]
+                fallbacks[p2_name] += match_fallbacks[p2_name]
                 
-                #scores[p1_name] += match_scores[p1_name]
-                #scores[p2_name] += match_scores[p2_name]
-                #fallbacks[p1_name] += match_fallbacks[p1_name]
-                #fallbacks[p2_name] += match_fallbacks[p2_name]
-
                 print(f"{result}")
 
                 if engine_break > 0:
