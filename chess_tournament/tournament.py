@@ -291,21 +291,36 @@ def swiss_tournament(
             opponents[p1_name].append(p2_name)
             opponents[p2_name].append(p1_name)
 
-            for game_idx in range(games_per_pairing):
+            # Flip a coin for the base color assignment to ensure fairness
+            flip = random.choice([True, False])
 
-                print(f"> {p1_name} vs {p2_name} (game {game_idx+1}) ... ", end="")
+            for game_idx in range(games_per_pairing):
+                
+                # Assign colors explicitly
+                if (game_idx % 2 == 0) == flip:
+                    white_name, black_name = p1_name, p2_name
+                else:
+                    white_name, black_name = p2_name, p1_name
+
+                print(f"> {white_name} (W) vs {black_name} (B) (game {game_idx+1}) ... ", end="", flush=True)
 
                 p1 = instantiate_fn(desc1)
                 p2 = instantiate_fn(desc2)
                 
-                # FIX: Set player names to match tournament participant names
-                # so match_scores dict keys align with participant tracking
+                # Set player names to match tournament participant names
                 p1.name = p1_name
                 p2.name = p2_name
+                
+                # Match the instantiated players to the colors assigned
+                if (game_idx % 2 == 0) == flip:
+                    white_p, black_p = p1, p2
+                else:
+                    white_p, black_p = p2, p1
 
                 try:
                     game = Game(p1, p2, max_half_moves=max_half_moves)
-                    result, match_scores, match_fallbacks = game.play(verbose=False)
+                    # Pass force_colors so the printed W/B matches the actual game W/B
+                    result, match_scores, match_fallbacks = game.play(verbose=False, force_colors=(white_p, black_p))
 
                 finally:
                     destroy_fn(p1)
@@ -361,10 +376,16 @@ def run_tournament(player_a, player_b, n_games=4, verbose=False, max_half_moves=
     print(f"Games: {n_games}\n")
 
     for game_idx in range(1, n_games + 1):
-        print(f"--- Game {game_idx} ---")
+        # Alternate colors for fairness
+        if game_idx % 2 != 0:
+            white, black = player_a, player_b
+        else:
+            white, black = player_b, player_a
+            
+        print(f"--- Game {game_idx} ({white.name} as White) ---")
 
         game = Game(player_a, player_b, max_half_moves)
-        result, scores, fallbacks = game.play(verbose=verbose)
+        result, scores, fallbacks = game.play(verbose=verbose, force_colors=(white, black))
 
         # Aggregate stats
         for player_name in results.keys():
